@@ -55,7 +55,7 @@ def get_args():
 
     parser.add_argument('-batch_size',  type=int, default=10)
     parser.add_argument('-learning_rate',  type=float, default=0.001)
-    parser.add_argument('-num_epoch',  type=int, default=20)
+    parser.add_argument('-num_epoch',  type=int, default=2) ### WAS 20 ###
 
 
     parser.add_argument('-noise_type', choices = ['awgn', 't-dist','hyeji_bursty'], default='awgn')
@@ -73,8 +73,8 @@ def get_args():
     parser.add_argument('-id', type=str, default=str(np.random.random())[2:8])
 
     args = parser.parse_args()
-    print args
-    print '[ID]', args.id
+    print(args)
+    print('[ID]', args.id)
     return args
 
 def test_bcjr_ber(args, model_path):
@@ -90,16 +90,16 @@ if __name__ == '__main__':
 
     args = get_args()
 
-    print '[BCJR Setting Parameters] Network starting path is ',                 args.init_nw_model
-    print '[BCJR Setting Parameters] Initial learning_rate is ',                 args.learning_rate
-    print '[BCJR Setting Parameters] Training batch_size is ',                   args.batch_size
-    print '[BCJR Setting Parameters] Training num_epoch is ',                    args.num_epoch
-    print '[BCJR Setting Parameters] Turbo Decoding Iteration ',                 args.num_dec_iteration
+    print('[BCJR Setting Parameters] Network starting path is ',                 args.init_nw_model)
+    print('[BCJR Setting Parameters] Initial learning_rate is ',                 args.learning_rate)
+    print('[BCJR Setting Parameters] Training batch_size is ',                   args.batch_size)
+    print('[BCJR Setting Parameters] Training num_epoch is ',                    args.num_epoch)
+    print('[BCJR Setting Parameters] Turbo Decoding Iteration ',                 args.num_dec_iteration)
 
-    print '[BCJR Setting Parameters] RNN Direction is ', args.rnn_direction
-    print '[BCJR Setting Parameters] RNN Model Type is ', args.rnn_setup
-    print '[BCJR Setting Parameters] Number of RNN layer is ', args.num_Dec_layer
-    print '[BCJR Setting Parameters] Number of RNN unit is ', args.num_Dec_unit
+    print('[BCJR Setting Parameters] RNN Direction is ', args.rnn_direction)
+    print('[BCJR Setting Parameters] RNN Model Type is ', args.rnn_setup)
+    print('[BCJR Setting Parameters] Number of RNN layer is ', args.num_Dec_layer)
+    print('[BCJR Setting Parameters] Number of RNN unit is ', args.num_Dec_unit)
 
 
     M = np.array([args.M])
@@ -109,12 +109,12 @@ if __name__ == '__main__':
     trellis2 = cc.Trellis(M, generator_matrix,feedback=feedback)# Create trellis data structure
     interleaver = RandInterlv.RandInterlv(args.block_len, 0)
     p_array = interleaver.p_array
-    print '[BCJR Code Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback
+    print('[BCJR Code Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback)
     codec  = [trellis1, trellis2, interleaver]
 
-    print '[BCJR Setting Parameters] Training Data SNR is ', args.train_snr, ' dB'
-    print '[BCJR Setting Parameters] Code Block Length is ', args.block_len
-    print '[BCJR Setting Parameters] Number of Train Block is ', args.num_block_train, ' Test Block ', args.num_block_test
+    print('[BCJR Setting Parameters] Training Data SNR is ', args.train_snr, ' dB')
+    print('[BCJR Setting Parameters] Code Block Length is ', args.block_len)
+    print('[BCJR Setting Parameters] Number of Train Block is ', args.num_block_train, ' Test Block ', args.num_block_test)
 
     model = build_decoder(args)
 
@@ -137,15 +137,15 @@ if __name__ == '__main__':
 
     if args.init_nw_model != 'default':
         model.load_weights(args.init_nw_model)
-        print '[BCJR][Warning] Loaded Some init weight', args.init_nw_model
+        print('[BCJR][Warning] Loaded Some init weight', args.init_nw_model)
     else:
-        print '[BCJR][Warning] Train from scratch, not loading weight!'
+        print('[BCJR][Warning] Train from scratch, not loading weight!')
 
     model.fit(x=bcjr_inputs_train, y=bcjr_outputs_train, batch_size=train_batch_size,
               epochs=args.num_epoch,  validation_data= (bcjr_inputs_test, bcjr_outputs_test))
 
     model.save_weights('./tmp/bcjr_train'+args.id +'_1.h5')
-    print '[BCJR] Saved Model at', './tmp/bcjr_train'+args.id +'_1.h5'
+    print('[BCJR] Saved Model at', './tmp/bcjr_train'+args.id +'_1.h5')
 
     test_bcjr_ber(args,'./tmp/bcjr_train'+args.id +'_1.h5' )
 

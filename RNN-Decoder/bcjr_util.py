@@ -12,8 +12,8 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
 
     start_time = time.time()
     # print
-    print '[BCJR] Block Length is ', block_len
-    print '[BCJR] Number of Block is ', num_block
+    print('[BCJR] Block Length is ', block_len)
+    print('[BCJR] Number of Block is ', num_block)
 
     input_feature_num = 3
     noise_type  = 'awgn'
@@ -44,6 +44,9 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
         non_sys_symbols_1 = par1_r
         non_sys_symbols_2 = par2_r
         noise_variance = noise_sigma**2
+        #print("+++++++++++++++++++")
+        #print("SYS_SYMBOLS: ", sys_symbols)
+        #print("+++++++++++++++++++")
         sys_symbols_i = interleaver.interlv(sys_symbols)
         trellis = trellis1
 
@@ -74,6 +77,11 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
 
             # MAP 2
             L_int_2 = interleaver.interlv(L_ext_1)
+
+            #print("+++++++++++++++++++++++++++++++++++")
+            #print(sys_symbols_i)
+            #print(sys_symbols_i.shape)
+            #print("+++++++++++++++++++++++++++++++++++")
 
             [L_ext_2, decoded_bits] = turbo.map_decode(sys_symbols_i, non_sys_symbols_2,
                                              trellis, noise_variance, L_int_2, 'compute')
@@ -115,9 +123,9 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
         bcjr_outputs[2*num_iteration-1,block_idx,:,:] = L_ext_2.reshape(block_len,1)
 
     end_time = time.time()
-    print '[BCJR] The input feature has shape', bcjr_inputs.shape,'the output has shape', bcjr_outputs.shape
-    print '[BCJR] Generating Training Example takes ', end_time - start_time , 'secs'
-    print '[BCJR] file id is', identity
+    print('[BCJR] The input feature has shape', bcjr_inputs.shape,'the output has shape', bcjr_outputs.shape)
+    print('[BCJR] Generating Training Example takes ', end_time - start_time , 'secs')
+    print('[BCJR] file id is', identity)
 
     bcjr_inputs_train   = bcjr_inputs.reshape((-1, block_len,input_feature_num ))
     bcjr_outputs_train  = bcjr_outputs.reshape((-1,  block_len, 1))
@@ -144,7 +152,7 @@ if __name__ == '__main__':
     trellis2 = cc.Trellis(M, generator_matrix,feedback=feedback)# Create trellis data structure
     interleaver = RandInterlv.RandInterlv(100, 0)
     p_array = interleaver.p_array
-    print '[Turbo Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback
+    print('[Turbo Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback)
 
     ##########################################
     # Setting Up RNN Model

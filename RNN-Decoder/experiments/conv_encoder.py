@@ -1,3 +1,5 @@
+# Should be ./experiments
+
 from collections import defaultdict
 try:
     import cPickle as pickle
@@ -5,6 +7,7 @@ except ImportError:
     import pickle
 
 import sys
+import os
 
 import keras
 from keras.layers import Input, Embedding, LSTM,GRU, Dense, TimeDistributed, Lambda
@@ -27,13 +30,13 @@ import numpy as np
 
 from utils import code_err, conv_enc
 
-from keras.backend.tensorflow_backend import set_session
-config = tf.ConfigProto()
-frac = 0.45
+# from keras.backend.tensorflow_backend import set_session
+# config = tf.ConfigProto()
+# frac = 0.45
 
-config.gpu_options.per_process_gpu_memory_fraction = frac
-set_session(tf.Session(config=config))
-print '[Test][Warining] Restrict GPU memory usage to', frac, ', enable',str(int(1.0/frac)), 'processes'
+# config.gpu_options.per_process_gpu_memory_fraction = frac
+# set_session(tf.Session(config=config))
+# print '[Test][Warining] Restrict GPU memory usage to', frac, ', enable',str(int(1.0/frac)), 'processes'
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -75,9 +78,9 @@ def get_args():
     parser.add_argument('--GPU_proportion', type=float, default=1.00)
 
     args = parser.parse_args()
-    print args
+    print(args)
 
-    print '[ID]', args.id
+    print('[ID]', args.id)
     return args
 
 def build_encoder(args):
@@ -117,10 +120,10 @@ def build_encoder(args):
 def train(args):
 
     X_train_raw = np.random.randint(0,2,args.block_len * args.num_block)
-    X_test_raw  = np.random.randint(0,2,args.block_len * args.num_block/args.test_ratio)
+    X_test_raw  = np.random.randint(0,2,int(args.block_len * args.num_block/args.test_ratio))
 
     X_train = X_train_raw.reshape((args.num_block, args.block_len, 1))
-    X_test  = X_test_raw.reshape((args.num_block/args.test_ratio, args.block_len, 1))
+    X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
 
     X_conv_train = 2.0*conv_enc(X_train, args)-1.0
     X_conv_test  = 2.0*conv_enc(X_test, args) - 1.0
@@ -128,9 +131,9 @@ def train(args):
     model = build_encoder(args)
 
     if args.enc_weight == 'default':
-        print 'Encoder has no weight'
+        print('Encoder has no weight')
     else:
-        print 'Encoder loaded weight', args.Enc_weight
+        print('Encoder loaded weight', args.Enc_weight)
         model.load_weights(args.Enc_weight)
 
 
@@ -142,7 +145,11 @@ def train(args):
     model.fit(X_train, X_conv_train, validation_data=(X_test, X_conv_test),
               batch_size=args.batch_size, epochs=args.num_epoch)
 
-    model.save_weights('./tmp/conv_enc_'+args.id+'.h5')
+    ###
+    if not os.path.exists('tmp'):
+        os.makedirs('tmp')
+    ###
+    model.save_weights('tmp/conv_enc_'+args.id+'.h5')
 
 
 if __name__ == '__main__':
@@ -152,10 +159,10 @@ if __name__ == '__main__':
     if args.GPU_proportion < 1.00:
         from keras.backend.tensorflow_backend import set_session
         config = tf.ConfigProto()
-        frac = args.GPU_proportion
+        frac = args.GPU_proportion # 0.45
 
         config.gpu_options.per_process_gpu_memory_fraction = frac
         set_session(tf.Session(config=config))
-        print '[Test][Warining] Restrict GPU memory usage to 45%, enable',str(int(1/args.GPU_proportion)), 'processes'
+        print('[Test][Warining] Restrict GPU memory usage to 45%, enable',str(int(1/args.GPU_proportion)), 'processes')
 
     train(args)
