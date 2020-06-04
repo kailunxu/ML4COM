@@ -80,7 +80,7 @@ def get_args():
     parser.add_argument('-test_ratio',  type=int, default=10)
 
     parser.add_argument('-num_Dec_layer',  type=int, default=2)
-    parser.add_argument('-num_Dec_unit',  type=int, default=500) # WAS 500
+    parser.add_argument('-num_Dec_unit',  type=int, default=150) # WAS 500
 
     parser.add_argument('-rnn_setup', choices = ['lstm', 'gru'], default = 'gru')
 
@@ -201,22 +201,21 @@ def train(args):
 
     model.save_weights('./tmp/conv_dec'+args.id+'.h5')
 
-def test(args, dec_weight, doExpanded=False):
-    print("=================================")
-    print("=================================")
-    if doExpanded:
-        print("BL Bef: ", args.block_len)
-        args.block_len *= 10
-        print("BL Aft: ", args.block_len)
+#def test(args, dec_weight, doExpanded=False):
+def test(args, dec_weight):
+    # if doExpanded:
+    #     print("BL Bef: ", args.block_len)
+    #     args.block_len *= 10
+    #     print("BL Aft: ", args.block_len)
 
     X_test_raw  = np.random.randint(0,2,int(args.num_block*args.block_len/args.test_ratio))
     X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
     X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
 
     #print('Testing before fine-tuning'
-    snr_start = -1.0
-    snr_stop  = 8
-    snr_points = 10
+    snr_start = -3      ### -1.0 ###
+    snr_stop  = 5       ### 8 ###
+    snr_points = 9      ### 10 ###
 
     dec_trainable = True
 
@@ -234,7 +233,7 @@ def test(args, dec_weight, doExpanded=False):
 
     ber, bler = [],[]
     for idx, snr_db in enumerate(SNRS_dB):
-        print("[testing]RUNNING IDX: ", idx)
+        print("[testing]RUNNING SNR_DB: ", snr_db)
 
         inputs = Input(shape=(args.block_len, args.code_rate))
 
@@ -289,7 +288,8 @@ def test(args, dec_weight, doExpanded=False):
 
     print('SNRS:', SNRS_dB)
     print('BER:',ber)
-    print('BLER:',bler)
+    #print('BLER:',bler)
+    return ber
 
 
 
@@ -299,7 +299,25 @@ if __name__ == '__main__':
 
     args = get_args()
 
-    train(args)
-    test(args, dec_weight='./tmp/conv_dec'+args.id+'.h5', doExpanded=False)
-    test(args, dec_weight='./tmp/conv_dec'+args.id+'.h5', doExpanded=True)
-    #test(args, dec_weight='./tmp/conv_dec335939.h5')
+    Y = [x/2.0 for x in range(-5, 5)]
+    V = {}
+    for y in Y:
+        print("=================================")
+        print("RUNNING Y=", y)
+        print("=================================")
+        args.train_channel_low = y
+        args.train_channel_high = y
+        train(args)
+        V[y] = test(args, dec_weight='./tmp/conv_dec'+args.id+'.h5')
+        print("=================================")
+        print("=================================")
+        print("V so far...\n", V)
+        print("=================================")
+        
+    print("\n\n\nDONE\n")
+    print(V)
+
+
+    #test(args, dec_weight='./tmp/conv_dec'+args.id+'.h5', doExpanded=True)
+    #test(args, dec_weight='./tmp/conv_dec669919.h5')
+        
