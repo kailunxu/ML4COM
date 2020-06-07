@@ -6,10 +6,11 @@ Evaluate convolutional code benchmark.
 import sys
 import numpy as np
 
+from utils import corrupt_signal
 import commpy.channelcoding.convcode as cc
 from commpy.utilities import hamming_dist
 import multiprocessing as mp
-from utils import corrupted_signal
+
 
 def get_test_sigmas(snr_start, snr_end, snr_points):
     SNR_dB_start_Eb = snr_start
@@ -50,7 +51,8 @@ def turbo_compute(args, idx, x, trellis1, test_sigmas, M):
 
 def conv_decode_bench(args):
     
-    num_block = 100
+    print("viterbi starts", args.block_len)
+    num_block = 1200
     ##########################################
     # Setting Up Codec
     ##########################################
@@ -71,28 +73,36 @@ def conv_decode_bench(args):
     map_nb_errors      = np.zeros(test_sigmas.shape)
     nb_block_no_errors = np.zeros(test_sigmas.shape)
 
+    
     for idx in range(len(test_sigmas)):
+        print("current index", idx)
+        num_block_test = num_block
         results = []
-        print(num_block)
         #pool = mp.Pool(processes=args.num_cpu)
         #results = pool.starmap(turbo_compute, [(idx,x) for x in range(num_block)])
         for x in range(num_block):
             results.append(turbo_compute(args, idx, x, trellis1, test_sigmas, M))
+            if (sum(results)>60 and x > num_block /40):
+                num_block_test = x + 1
+                break
         for result in results:
             if result == 0:
                 nb_block_no_errors[idx] = nb_block_no_errors[idx]+1
                 
         nb_errors[idx]+= sum(results)
         #print('[testing]SNR: ' , SNRS[idx])
-        print('[testing]BER: ', sum(results)/float(args.block_len*num_block))
+        print('[testing]BER: ', sum(results)/float(args.block_len*num_block_test))
         #print('[testing]BLER: ', 1.0 - nb_block_no_errors[idx]/args.num_block)
-        commpy_res_ber.append(sum(results)/float(args.block_len*num_block))
-        commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block)
+        commpy_res_ber.append(sum(results)/float(args.block_len*num_block_test))
+        #commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block_test)
 
 
     print('[Result]SNR: ', SNRS)
     print('[Result]BER', commpy_res_ber)
-    print('[Result]BLER', commpy_res_bler)
+    #print('[Result]BLER', commpy_res_bler)
 
 
     return commpy_res_ber, commpy_res_bler
+
+if __name__ == '__main__':
+    main()

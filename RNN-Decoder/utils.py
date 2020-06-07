@@ -382,5 +382,5 @@ def conv_enc(X_train_raw, args):
 
 
 
-if __name__ == '__main__':
-    pass
+#if __name__ == '__main__':
+ #   pass

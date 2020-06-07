@@ -185,7 +185,7 @@ def get_args():
 
     parser.add_argument('-batch_size',  type=int, default=200)
     parser.add_argument('-learning_rate',  type=float, default=0.001)
-    parser.add_argument('-num_epoch',  type=int, default=20)
+    parser.add_argument('-num_epoch',  type=int, default=30)
 
     parser.add_argument('-code_rate',  type=int, default=2)
 
@@ -197,7 +197,7 @@ def get_args():
     parser.add_argument('-loss', choices = ['binary_crossentropy', 'mean_squared_error'], default = 'mean_squared_error')
 
     parser.add_argument('-train_channel_low', type=float, default=0.0)
-    parser.add_argument('-train_channel_high', type=float, default=8.0)
+    parser.add_argument('-train_channel_high', type=float, default=10.0)
     parser.add_argument('-test_channel_low', type=float, default=6.0)
     parser.add_argument('-test_channel_high', type=float, default=6.0)
     
@@ -258,7 +258,7 @@ def main():
     
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
-    scheduler_lr = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 20, gamma = 0.1)
+    scheduler_lr = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 30, gamma = 0.1)
 
     train_x, train_y = _generate_training_data(args)
     test_x, test_y = _generate_test_data(args)

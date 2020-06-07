@@ -18,7 +18,6 @@ class RNNGRU(nn.Module):
         self.batch_layer2 = nn.BatchNorm1d(seq_len)
         self.linear_layer = nn.Linear(hidden_dim, 1)
         
-        
         #self.init_weights()
         nn.init.normal_(self.linear_layer.weight, 0.0, 0.01)
         nn.init.constant_(self.linear_layer.bias, 0.0)
