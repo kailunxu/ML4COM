@@ -310,29 +310,40 @@ def build_rnn_data_feed(num_block, block_len, noiser, codec, is_all_zero = False
 #######################################
 
 def snr_db2sigma(train_snr):
+    """
+    Converts a SNR_dB value (in dB units) to sigma value (ie. the standard deviation) of AWGN channel noise. 
+    Inverse of this.snr_sigma2db().
+    """
     block_len    = 1000
     train_snr_Es = train_snr + 10*np.log10(float(block_len)/float(2*block_len))
     sigma_snr    = np.sqrt(1/(2*10**(float(train_snr_Es)/float(10))))
     return sigma_snr
 
 def snr_sigma2db(sigma_snr):
+    """
+    Converts a sigma value (std dev) of an AWGN channel noise to SNR_dB value (in dB units).
+    Inverse of this.snr_db2sigma().
+    """
     SNR          = -10*np.log10(sigma_snr**2)
     return SNR
 
-def get_test_sigmas(snr_start, snr_end, snr_points):
-    SNR_dB_start_Eb = snr_start
-    SNR_dB_stop_Eb = snr_end
-    SNR_points = snr_points
+def get_test_sigmas(SNR_dB_start_Eb, SNR_dB_stop_Eb, SNR_points):
+    """
+    Returns
+    -------
+    SNRS_dB
+        list of [SNR_points] evenly spaced values between [SNR_dB_start_Eb] and [SNR_dB_stop_Eb]
 
+    test_sigmas
+        applied this.snr_db2sigma() to each element in [SNRS_dB]
+    """
     snr_interval = (SNR_dB_stop_Eb - SNR_dB_start_Eb)* 1.0 /  (SNR_points-1)
     SNRS_dB = [snr_interval* item + SNR_dB_start_Eb for item in range(SNR_points)]
     SNRS_dB_Es = [item + 10*np.log10(1.0/2.0) for item in SNRS_dB]
     test_sigmas = np.array([np.sqrt(1/(2*10**(float(item)/float(10)))) for item in SNRS_dB_Es])
 
-    SNRS = SNRS_dB
-    print('[testing] SNR range in dB ', SNRS)
-
-    return SNRS, test_sigmas
+    print('[testing] SNR range in dB ', SNRS_dB)
+    return SNRS_dB, test_sigmas
 
 def code_err(y_true, y_pred):
     '''

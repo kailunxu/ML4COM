@@ -342,6 +342,7 @@ def conv_encode(message_bits, trellis, code_type = 'default', puncture_matrix=No
     current_state = 0
     j = 0
 
+    #for i in range(int(number_inbits/k)-1): # Loop through all input bits ### EDITED ###
     for i in range(int(number_inbits/k)): # Loop through all input bits
         current_input = bitarray2dec(inbits[i*k:(i+1)*k])
         current_output = output_table[current_state][current_input]

@@ -1,7 +1,11 @@
 import time
 import numpy as np
 import math
+
 import commpy.channelcoding.turbo as turbo
+import commpy.channelcoding.interleavers as RandInterlv
+import commpy.channelcoding.convcode as cc
+
 from utils import corrupt_signal, snr_db2sigma
 
 def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = True, train_snr_db = 0.0, save_path = './tmp/',
@@ -12,8 +16,8 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
 
     start_time = time.time()
     # print
-    print '[BCJR] Block Length is ', block_len
-    print '[BCJR] Number of Block is ', num_block
+    print('[BCJR] Block Length is ', block_len)
+    print('[BCJR] Number of Block is ', num_block)
 
     input_feature_num = 3
     noise_type  = 'awgn'
@@ -115,9 +119,9 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
         bcjr_outputs[2*num_iteration-1,block_idx,:,:] = L_ext_2.reshape(block_len,1)
 
     end_time = time.time()
-    print '[BCJR] The input feature has shape', bcjr_inputs.shape,'the output has shape', bcjr_outputs.shape
-    print '[BCJR] Generating Training Example takes ', end_time - start_time , 'secs'
-    print '[BCJR] file id is', identity
+    print('[BCJR] The input feature has shape', bcjr_inputs.shape,'the output has shape', bcjr_outputs.shape)
+    print('[BCJR] Generating Training Example takes ', end_time - start_time , 'secs')
+    print('[BCJR] file id is', identity)
 
     bcjr_inputs_train   = bcjr_inputs.reshape((-1, block_len,input_feature_num ))
     bcjr_outputs_train  = bcjr_outputs.reshape((-1,  block_len, 1))
@@ -134,9 +138,6 @@ def generate_bcjr_example(num_block, block_len, codec, num_iteration, is_save = 
 
 if __name__ == '__main__':
 
-    import commpy.channelcoding.interleavers as RandInterlv
-    import commpy.channelcoding.convcode as cc
-
     M = np.array([2]) # Number of delay elements in the convolutional encoder
     generator_matrix = np.array([[7, 5]])
     feedback = 7
@@ -144,11 +145,8 @@ if __name__ == '__main__':
     trellis2 = cc.Trellis(M, generator_matrix,feedback=feedback)# Create trellis data structure
     interleaver = RandInterlv.RandInterlv(100, 0)
     p_array = interleaver.p_array
-    print '[Turbo Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback
+    print('[Turbo Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback)
 
-    ##########################################
     # Setting Up RNN Model
-    ##########################################
     codec  = [trellis1, trellis2, interleaver]
-
     generate_bcjr_example(num_block=10000, block_len=100, codec=codec, num_iteration=6)

@@ -6,38 +6,54 @@ Evaluate convolutional code benchmark.
 import sys
 import numpy as np
 
-from utils import corrupt_signal
+from utils import corrupt_signal, get_test_sigmas
 import commpy.channelcoding.convcode as cc
 from commpy.utilities import hamming_dist
 import multiprocessing as mp
 
 
-def get_test_sigmas(snr_start, snr_end, snr_points):
-    SNR_dB_start_Eb = snr_start
-    SNR_dB_stop_Eb = snr_end
-    SNR_points = snr_points
+def get_args():
+    import argparse
+    parser = argparse.ArgumentParser()
 
-    snr_interval = (SNR_dB_stop_Eb - SNR_dB_start_Eb)* 1.0 /  (SNR_points-1)
-    SNRS_dB = [snr_interval* item + SNR_dB_start_Eb for item in range(SNR_points)]
-    SNRS_dB_Es = [item + 10*np.log10(1.0/2.0) for item in SNRS_dB]
-    test_sigmas = np.array([np.sqrt(1/(2*10**(float(item)/float(10)))) for item in SNRS_dB_Es])
+    parser.add_argument('-num_block', type=int, default=12000)
+    parser.add_argument('-block_len', type=int, default=100)
+    parser.add_argument('-test_ratio',  type=int, default=10)
 
-    SNRS = SNRS_dB
-    print('[testing] SNR range in dB ', SNRS)
+    parser.add_argument('-snr_test_start', type=float, default=-3.0)
+    parser.add_argument('-snr_test_end', type=float, default=6.0)
+    parser.add_argument('-snr_points', type=int, default=10)
+    
+    parser.add_argument('-enc1',  type=int, default=7)
+    parser.add_argument('-enc2',  type=int, default=5)
+    parser.add_argument('-feedback',  type=int, default=7)
+    parser.add_argument('-M',  type=int, default=2, help="Number of delay elements in the convolutional encoder")
 
-    return SNRS, test_sigmas
+    parser.add_argument('-noise_type',        choices = ['awgn', 't-dist','hyeji_bursty'], default='awgn')
+    parser.add_argument('-radar_power',       type=float, default=20.0)
+    parser.add_argument('-radar_prob',        type=float, default=0.05)
+    parser.add_argument('-radar_denoise_thd', type=float, default=10.0)
+    parser.add_argument('-v',                 type=int,   default=3)
+    
+    parser.add_argument('-id', type=str, default=str(np.random.random())[2:8])
 
+    args = parser.parse_args()
+    print(args)
 
-def turbo_compute(args, idx, x, trellis1, test_sigmas, M):
+    print('[ID]', args.id)
+    return args
+
+def turbo_compute(args, sigma_idx, trellis1, M):
     '''
-    Compute Turbo Decoding in 1 iterations for one SNR point.
+    Helper function used to compute Turbo Decoding in 1 iterations for one SNR point. 
+    Called in this.conv_decode_bench().
     '''
     tb_depth = 15
     np.random.seed()
     message_bits = np.random.randint(0, 2, args.block_len)
 
     coded_bits = cc.conv_encode(message_bits, trellis1)
-    received  = corrupt_signal(coded_bits, noise_type =args.noise_type, sigma = test_sigmas[idx],
+    received  = corrupt_signal(coded_bits, noise_type =args.noise_type, sigma = sigma_idx,
                                vv =args.v, radar_power = args.radar_power, radar_prob = args.radar_prob,
                                denoise_thd = args.radar_denoise_thd)
 
@@ -50,21 +66,19 @@ def turbo_compute(args, idx, x, trellis1, test_sigmas, M):
     return num_bit_errors
 
 def conv_decode_bench(args):
-    
-    print("viterbi starts", args.block_len)
-    num_block = 12000 #1200
-    ##########################################
+    """
+    Outputs benchmark for viterbi algorithm for a given range of test_snr values. Called in Called in plot_stats() of conv_decoder.py.
+    """
+    print("viterbi starts (block_len =", args.block_len, ")")
+    num_block = args.num_block // args.test_ratio #1200
+
     # Setting Up Codec
-    ##########################################
     M = np.array([2]) # Number of delay elements in the convolutional encoder
     generator_matrix = np.array([[args.enc1, args.enc2]])
     feedback = args.feedback
-
     trellis1 = cc.Trellis(M, generator_matrix,feedback=feedback)  # Create trellis data structure
 
     SNRS, test_sigmas = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
-
-    #tb_depth = 15
 
     commpy_res_ber = []
     #commpy_res_bler= []
@@ -73,7 +87,6 @@ def conv_decode_bench(args):
     #map_nb_errors      = np.zeros(test_sigmas.shape)
     nb_block_no_errors = np.zeros(test_sigmas.shape)
 
-    
     for idx in range(len(test_sigmas)):
         print("current index", idx)
         num_block_test = num_block
@@ -81,7 +94,7 @@ def conv_decode_bench(args):
         #pool = mp.Pool(processes=args.num_cpu)
         #results = pool.starmap(turbo_compute, [(idx,x) for x in range(num_block)])
         for x in range(num_block):
-            results.append(turbo_compute(args, idx, x, trellis1, test_sigmas, M))
+            results.append(turbo_compute(args, sigma_idx, trellis1, M))
             if (sum(results)>60 and x > num_block /40):
                 num_block_test = x + 1
                 break
@@ -90,22 +103,20 @@ def conv_decode_bench(args):
                 nb_block_no_errors[idx] = nb_block_no_errors[idx]+1
                 
         nb_errors[idx]+= sum(results)
-        #print('[testing]SNR: ' , SNRS[idx])
+        # print('[testing]SNR: ' , SNRS[idx])
         BER = sum(results)/float(args.block_len*num_block_test)
-        print('[testing]BER: ', BER)
-        #print('[testing]BLER: ', 1.0 - nb_block_no_errors[idx]/args.num_block)
+        # print('[testing]BER: ', BER)
+        # print('[testing]BLER: ', 1.0 - nb_block_no_errors[idx]/args.num_block)
         commpy_res_ber.append(BER)
-        #commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block_test)
+        # commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block_test)
 
 
     print('[Result]SNR: ', SNRS)
     print('[Result]BER', commpy_res_ber)
-    #print('[Result]BLER', commpy_res_bler)
+    # print('[Result]BLER', commpy_res_bler)
 
-
-    return commpy_res_ber, commpy_res_ber#, commpy_res_bler
+    return commpy_res_ber, 0#, commpy_res_bler
 
 if __name__ == '__main__':
-    #args = get_args()
-    #conv_decode_bench(args)
-    raise NotImplementedError
+    args = get_args()
+    conv_decode_bench(args)
