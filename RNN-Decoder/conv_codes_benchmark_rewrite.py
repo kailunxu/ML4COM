@@ -52,7 +52,7 @@ def turbo_compute(args, idx, x, trellis1, test_sigmas, M):
 def conv_decode_bench(args):
     
     print("viterbi starts", args.block_len)
-    num_block = 1200
+    num_block = 12000 #1200
     ##########################################
     # Setting Up Codec
     ##########################################
@@ -64,13 +64,13 @@ def conv_decode_bench(args):
 
     SNRS, test_sigmas = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
 
-    tb_depth = 15
+    #tb_depth = 15
 
     commpy_res_ber = []
-    commpy_res_bler= []
+    #commpy_res_bler= []
 
     nb_errors          = np.zeros(test_sigmas.shape)
-    map_nb_errors      = np.zeros(test_sigmas.shape)
+    #map_nb_errors      = np.zeros(test_sigmas.shape)
     nb_block_no_errors = np.zeros(test_sigmas.shape)
 
     
@@ -91,9 +91,10 @@ def conv_decode_bench(args):
                 
         nb_errors[idx]+= sum(results)
         #print('[testing]SNR: ' , SNRS[idx])
-        print('[testing]BER: ', sum(results)/float(args.block_len*num_block_test))
+        BER = sum(results)/float(args.block_len*num_block_test)
+        print('[testing]BER: ', BER)
         #print('[testing]BLER: ', 1.0 - nb_block_no_errors[idx]/args.num_block)
-        commpy_res_ber.append(sum(results)/float(args.block_len*num_block_test))
+        commpy_res_ber.append(BER)
         #commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block_test)
 
 
@@ -102,7 +103,9 @@ def conv_decode_bench(args):
     #print('[Result]BLER', commpy_res_bler)
 
 
-    return commpy_res_ber, commpy_res_bler
+    return commpy_res_ber, commpy_res_ber#, commpy_res_bler
 
 if __name__ == '__main__':
-    main()
+    #args = get_args()
+    #conv_decode_bench(args)
+    raise NotImplementedError

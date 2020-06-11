@@ -1,3 +1,7 @@
+"""
+Conv_decoder.py, but using PyTorch instead of Keras.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +14,9 @@ import matplotlib.pyplot as plt
 from conv_codes_benchmark_rewrite import conv_decode_bench
 
 def conv_enc(X_train_raw, args):
+    """
+    Encodes a training sequence using cc.conv_encode(cc.Trellis([CUSTOM_GENERATOR_MATRIX])).
+    """
     num_block = X_train_raw.shape[0]
     block_len = X_train_raw.shape[1]
     x_code    = []
@@ -36,8 +43,8 @@ def _generate_training_data(args):
     X_conv_train = 2.0*conv_enc(Y_train, args) - 1.0
     Y_train = torch.tensor(Y_train.reshape((int(args.num_block / args.batch_size), args.batch_size, args.block_len, 1)))
     X_conv_train = torch.tensor(X_conv_train.reshape((int(args.num_block / args.batch_size), args.batch_size, args.block_len, 2)))
-    print(X_conv_train.shape)
-    print(Y_train.shape)
+    #print(X_conv_train.shape)
+    #print(Y_train.shape)
     return X_conv_train.float(), Y_train.float()
 
 def _generate_test_data(args):
@@ -49,8 +56,8 @@ def _generate_test_data(args):
     X_conv_train = 2.0*conv_enc(Y_train, args) - 1.0
     Y_train = torch.tensor(Y_train.reshape((int(args.test_block / args.batch_size), args.batch_size, args.block_len, 1)))
     X_conv_train = torch.tensor(X_conv_train.reshape((int(args.test_block / args.batch_size), args.batch_size, args.block_len, 2)))
-    print(X_conv_train.shape)
-    print(Y_train.shape)
+    #print(X_conv_train.shape)
+    #print(Y_train.shape)
     return X_conv_train.float(), Y_train.float()
 
 def _train_epoch(data_x, data_y, model, criterion, optimizer, hidden1, hidden2):
@@ -79,6 +86,9 @@ def _train_epoch(data_x, data_y, model, criterion, optimizer, hidden1, hidden2):
     return hidden1, hidden2
 
 def _evaluate_help(t_x, t_y, model, criterion, h1, h2):
+    '''
+    evaluate average BER/BLER for a specific SNR
+    '''
     running_loss = []
     ber = []
     bler = []
@@ -100,6 +110,9 @@ def _evaluate_help(t_x, t_y, model, criterion, h1, h2):
     return np.mean(running_loss), np.mean(ber), np.mean(bler)
 
 def _evaluate_overall_performance(args, test_x, test_y, model, criterion, hidden1, hidden2):
+    '''
+    Evaluate performance across SNR intervals
+    '''
     hidden1_p = hidden1
     hidden2_p = hidden2
     
@@ -123,7 +136,7 @@ def _evaluate_overall_performance(args, test_x, test_y, model, criterion, hidden
     
     print(stats)
     
-    ber, _ = conv_decode_bench(args)
+    ber, _ = conv_decode_bench(args) # get benchmark data
     bench_ber, = plt.plot(SNRS_dB, ber, '-')
     neural_ber, = plt.plot(SNRS_dB, stats[:, 1], '--')
     
@@ -251,6 +264,7 @@ def plot_stats(stats, name):
     
 def main():
     args = get_args()
+    # Establish GRU model
     model = RNNGRU(args.code_rate, args.num_Dec_unit, args.block_len)
     
     hidden1 = model.init_hidden(args.batch_size)
@@ -260,6 +274,7 @@ def main():
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
     scheduler_lr = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 30, gamma = 0.1)
 
+    # Get training and testing data
     train_x, train_y = _generate_training_data(args)
     test_x, test_y = _generate_test_data(args)
     
@@ -286,10 +301,12 @@ def main():
         for param_group in optimizer.param_groups:
             print("learning rate: ", param_group['lr'])
         
+        # Plot output
         plot_stats(train_stats, "training")
         plot_stats(test_stats, "test")
         print(train_stats)
         
+    # Evaluate overall performance
     _evaluate_overall_performance(args, test_x, test_y, model, criterion, hidden1, hidden2)
 
 if __name__ == '__main__':

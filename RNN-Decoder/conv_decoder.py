@@ -46,6 +46,9 @@ from conv_codes_benchmark_rewrite import conv_decode_bench
 
 
 def conv_enc(X_train_raw, args):
+    """
+    Encodes a training sequence using cc.conv_encode(cc.Trellis([CUSTOM_GENERATOR_MATRIX])).
+    """
     num_block = X_train_raw.shape[0]
     block_len = X_train_raw.shape[1]
     x_code    = []
@@ -64,10 +67,16 @@ def conv_enc(X_train_raw, args):
     return np.array(x_code)
 
 def errors(y_true, y_pred):
+    """
+    Mean of a binary loss function for training and testing RNNs.
+    """
     myOtherTensor = K.not_equal(y_true, K.round(y_pred))
     return K.mean(tf.cast(myOtherTensor, tf.float32))
 
 def snr_db2sigma(train_snr):
+    """
+    Converts SNR(db units) to the variance (sigma**2) used in channel encoding.
+    """
     block_len    = 100
     train_snr_Es = train_snr + 10*np.log10(float(block_len)/float(2*block_len))
     sigma_snr    = np.sqrt(1/(2*10**(float(train_snr_Es)/float(10))))
@@ -116,7 +125,7 @@ def get_args():
     parser.add_argument('-id', type=str, default=str(np.random.random())[2:8])
 
     parser.add_argument('-Dec_weight', type=str, default='default')
-    parser.add_argument('-type', choices=['train', 'test', 'compare snr', 'length expand', 'bit test'], default = 'compare snr')
+    parser.add_argument('-type', choices=['train', 'test', 'compareSnr', 'lengthExpand', 'bitTest', 'fig15'], default = 'compare snr')
 
     args = parser.parse_args()
     print(args)
@@ -125,6 +134,11 @@ def get_args():
     return args
 
 def build_decoder(args):
+    """
+    Builds the outline of a Keras-based RNN. 
+    [[ Input -> AWGN channel -> (Bi-GRU + BatchNorm)*2 -> Sigmoid. ]]
+    Uses dropout_rate=1, tanh activation, and Adam optimization.
+    """
 
     ont_pretrain_trainable = True
     dropout_rate           = 1.0
@@ -162,6 +176,11 @@ def build_decoder(args):
     return Model(input_x, decode)
 
 def train(args):
+    """
+    Trains a Viterbi-style decoder using two bi-GRU + batch norm layers followed by sigmoid.
+    Data is encoding using this.conv_enc() and this.build_decoder.channel().
+    Outputs a .h5 file with saved RNN weights.
+    """
 
     X_train_raw = np.random.randint(0,2,args.block_len * args.num_block)
     X_test_raw  = np.random.randint(0,2,int(args.block_len * args.num_block/args.test_ratio))
@@ -216,6 +235,10 @@ def train(args):
 
 
 def bittest(args, dec_weight):
+    """
+    Creates a curve of Viterbi-style decoder (using this.train()) BER for individual bits using many different test-SNR rates.
+    Data is encoded using this.conv_enc() and this.evaluate.channel(). Calls this.plot_bits().
+    """
     X_test_raw  = np.random.randint(0,2,int(args.num_block*args.block_len/args.test_ratio))
     X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
     X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
@@ -298,9 +321,23 @@ def evaluate(args, dec_weight, snr_db):
     return model_test
 
 def test(args, dec_weight, expanded = 1, bit = False):
+    """
+    Creates a curve of Viterbi-style decoder (using this.train()) or BCJR-style decoder (using bcjr_rnn_train.py) BER/BLER using many different test-SNR rates.
+    Data is encoded using this.conv_enc() and this.evaluate.channel(). 
+
+    Parameters
+    ----------
+    expanded : int
+        scales the block_len of testing data by 10**expanded
+
+    bit : bool
+        If true, calls this.plot_bits() and plots the error rate for specified bit positions against the test-SNR range. Same as this.bittest().
+        If false, calls this.plot_stats() and compares testing data with viterbi benchmark (using conv_codes_benchmark_rewrite.conv_codes_bench()).
+
+    """
     if (expanded != 1):
         print("expanded the block length "+ str(expanded) +" times")
-        args.block_len *= 10
+        args.block_len *= (10**expanded)
     X_test_raw  = np.random.randint(0,2,int(args.num_block*args.block_len/args.test_ratio))
     X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
     X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
@@ -310,7 +347,7 @@ def test(args, dec_weight, expanded = 1, bit = False):
     snr_stop  = args.snr_test_end
     snr_points = args.snr_points
 
-    dec_trainable = True
+    #dec_trainable = True
 
     SNR_dB_start_Eb = snr_start
     SNR_dB_stop_Eb = snr_stop
@@ -334,7 +371,6 @@ def test(args, dec_weight, expanded = 1, bit = False):
         ber_err_rate  = sum(sum(sum(abs(decoded_bits-X_test))))*1.0/(X_test.shape[0] * X_test.shape[1])# model.evaluate(X_feed_test, X_message_test, batch_size=10)
         tp0 = (abs(decoded_bits-X_test)).reshape([X_test.shape[0],X_test.shape[1]])
         bler_err_rate = sum(np.sum(tp0,axis=1)>0)*1.0/(X_test.shape[0])
-        #
         # print ber_err_rate
         # print bler_err_rate
         if (bit == True):
@@ -346,25 +382,31 @@ def test(args, dec_weight, expanded = 1, bit = False):
 
         del model_test
 
-    print('SNRS:', SNRS_dB)
-    print('BER:',ber)
-    print('BLER:',bler)
-    if (bit == True):
-        plot_bits(args, ber)
-    else:
-        if (expanded == 1):
-            plot_stats(args, ber, args.id + " test normal ")
-        else:
-            plot_stats(args, ber, args.id + " length expanded " + str(expanded) + "times")
+    print('[[SNRS]]:', SNRS_dB)
+    print('[[BER]]:',ber)
+    #print('BLER:',bler)
+    # if (bit == True):
+    #     plot_bits(args, ber)
+    # else:
+    #     if (expanded == 1):
+    #         plot_stats(args, ber, args.id + " test normal ")
+    #     else:
+    #         plot_stats(args, ber, args.id + " length expanded " + str(expanded) + "times")
     
     return ber
     
     
 def plot_compare(args, snr1, snr2, name1, name2):
+    """
+    Outputs a plot comparing:
+        (1) viterbi benchmark (using conv_codes_benchmark_rewrite.conv_codes_bench()), 
+        (2) the test BERs using train(SNR=0db), 
+        (3) the test BERs using train(SNR= Uniform(0db, 8db)).
+    """
     xaxis = range(int(args.snr_test_start), int(args.snr_test_end)+1)
     
-    print(snr1)
-    print(snr2)
+    print("[[SNR1]]:", snr1)
+    print("[[SNR2]]:", snr2)
     #train, = plt.plot(range(length), stats[:, 0], '-')
     ber, _ = conv_decode_bench(args)
     
@@ -382,14 +424,27 @@ def plot_compare(args, snr1, snr2, name1, name2):
     plt.close()
     
 def plot_stats(args, stats, name):
+    """
+    Outputs a plot comparing:
+        (1) viterbi benchmark (using conv_codes_benchmark_rewrite.conv_codes_bench()) (ie. "viterbi"),
+        (2) the test BERs using train(SNR=0db) (ie. "neural").
+    """
     xaxis = range(int(args.snr_test_start), int(args.snr_test_end)+1)
     stats = np.array(stats)
     
     #train, = plt.plot(range(length), stats[:, 0], '-')
     
     ber, _ = conv_decode_bench(args)
+    
+    print("#################################")
+    print("[NEURAL] ", stats)
+    print("[VITERBI] ", ber)
+    print("#################################")
+    
     viterbi, = plt.plot(xaxis, ber, '-')
     neural, = plt.plot(xaxis, stats, '--')
+    
+    
     #bler, = plt.plot(range(length), stats[:, 2], '--')
     plot_lines = [neural, viterbi]
     plt.legend(plot_lines, ["neural", "viterbi"])
@@ -401,12 +456,15 @@ def plot_stats(args, stats, name):
     plt.close()
 
 def plot_bits(args, stats):
+    """
+    Called using this.test(bit = True). 
+    Outputs a plot comparing each of the [0, 5, 20, ..., 99]th bit error rates against a test-SNR range.
+    """
     xaxis = range(int(args.snr_test_start), int(args.snr_test_end)+1)
     stats = np.array(stats)
     lines = []
     legend_name = []
     test_bit = [0, 5, 20, 50, 80, 95, 99]
-    
     
     for i in test_bit:
         print(stats[:, i])
@@ -429,13 +487,17 @@ if __name__ == '__main__':
     
     args = get_args()
     if (args.type == 'train'):
+        #python3 conv_decoder.py -type train -train_channel_low 0 -train_channel_high 0
         print("Training:")
         train(args)
-    if (args.type == 'test'):
+    if (args.type == 'test'): # 382020
+        #python3 conv_decoder.py -type test
         print("Testing:")
-        modelnum = input("Please input the model number: ")
+        #modelnum = input("Please input the model number: ")
+        #modelnum = "382020"
+        modelnum = args.id
         test(args, dec_weight='./tmp/conv_dec'+modelnum+'.h5')
-    if (args.type == 'compare snr'):
+    if (args.type == 'compareSnr'):
         print("Compare two snr training result:")
         model1 = input("please input the first model number to be compared: ")
         model2 = input("please input the second model number to be compared: ")
@@ -444,13 +506,56 @@ if __name__ == '__main__':
         #snr2 = test(args, dec_weight='./tmp/conv_dec'+model2+'.h5')
         snr2 = [0.2396875, 0.1890625, 0.1359375, 0.09375, 0.0571875, 0.0278125, 0.006853932584269663, 0.0017366946778711485, 0.00025, 0.0001]
         plot_compare(args, snr1, snr2, "train snr=0db", "train snr=0-8db")
-    if (args.type == 'length expand'):
+    if (args.type == 'lengthExpand'):
         print("Expand length Test:")
         modelnum = input("Please input the model number: ")
         ratio = int(input("please input the ratio to expand: "))
         test(args, dec_weight='./tmp/conv_dec'+modelnum+'.h5', expanded = ratio)
-    if (args.type == 'bit test'):
+    if (args.type == 'bitTest'):
+        #python3 conv_decoder.py -type 'bit test'
         print("Bit Test:")
         modelnum = input("Please input the model number: ")
         test(args, dec_weight='./tmp/conv_dec'+modelnum+'.h5', bit = True)
+    if (args.type == 'fig15'):
+        print("Running Fig 15 Test:")
+        SNR_train_range = [-1, 1, 2] # zero excluded due to type="test"
+        V = {}
+        args.snr_test_start = -3
+        args.snr_test_end = 5
+        args.snr_points = 9
+        for y in SNR_train_range:
+            args.train_channel_low = y
+            args.train_channel_high = y
+            args.id = str(np.random.random())[2:8]
+            print("=================================")
+            print("RUNNING Y=", y, "; ID = ", args.id)
+            print("=================================")
+            train(args)
+            V[y] = test(args, dec_weight='./tmp/conv_dec'+args.id+'.h5')
+            print("=================================")
+            print("=================================")
+            print("V so far...\n", V)
+            print("=================================")
+        print("\n\n\nDONE\n")
+        print(V)
+        #-2: 846991
+        #-1: 
+        # 1: 
+        # 2: 
+        # RUN plot compare on Log scale for all of them
+        # To find minimum, run:
+        ##############################
+        # min_val = {i:1000 for i in range(-3, 6)}
+        # min_id = {i:1000 for i in range(-3, 6)}
+        # train_ids = [-2.5, -2, -1.5, -1, -0.5, 0, .5, 1, 1.5, 2]
+        # for i in range(len(train_ids)):
+        #    for j in train_ids:
+        #      if V[j][i] < min_val[i-3]
+        #        min_val[i-3] = V[j][i]
+        #        min_id[i-3] = j
+        # V = {0: ber = [0.2346, 0.1893, 0.14448333333333332, 0.095325, 0.0534, 0.025833333333333333, 0.010116666666666666, 0.0031333333333333335, 0.0009]}
+        ##############################
+
+
+
         

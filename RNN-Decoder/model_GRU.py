@@ -4,6 +4,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class RNNGRU(nn.Module):
+    """
+    Base class for a GRU-based RNN using Pytorch.
+    """
+
     def __init__(self, input_dim, hidden_dim, seq_len):
         super().__init__()
         self.hidden_dim = hidden_dim
