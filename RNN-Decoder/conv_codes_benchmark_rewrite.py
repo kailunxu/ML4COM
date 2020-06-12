@@ -1,7 +1,6 @@
 '''
 Evaluate convolutional code benchmark.
 '''
-#from utils import corrupt_signal, get_test_sigmas
 
 import sys
 import numpy as np
@@ -65,7 +64,7 @@ def turbo_compute(args, sigma_idx, trellis1, M):
     num_bit_errors = hamming_dist(message_bits, decoded_bits)
     return num_bit_errors
 
-def conv_decode_bench(args):
+def conv_decode_bench(args, runMultithread=False):
     """
     Outputs benchmark for viterbi algorithm for a given range of test_snr values. Called in Called in plot_stats() of conv_decoder.py.
     """
@@ -81,32 +80,41 @@ def conv_decode_bench(args):
     SNRS, test_sigmas = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
 
     commpy_res_ber = []
-    #commpy_res_bler= []
+    commpy_res_bler= []
 
     nb_errors          = np.zeros(test_sigmas.shape)
-    #map_nb_errors      = np.zeros(test_sigmas.shape)
     nb_block_no_errors = np.zeros(test_sigmas.shape)
 
     for idx in range(len(test_sigmas)):
         print("current index", idx)
-        num_block_test = num_block
-        results = []
-        #pool = mp.Pool(processes=args.num_cpu)
-        #results = pool.starmap(turbo_compute, [(idx,x) for x in range(num_block)])
-        for x in range(num_block):
-            results.append(turbo_compute(args, sigma_idx, trellis1, M))
-            if (sum(results)>60 and x > num_block /40):
-                num_block_test = x + 1
-                break
-        for result in results:
-            if result == 0:
-                nb_block_no_errors[idx] = nb_block_no_errors[idx]+1
-                
-        nb_errors[idx]+= sum(results)
-        # print('[testing]SNR: ' , SNRS[idx])
-        BER = sum(results)/float(args.block_len*num_block_test)
-        # print('[testing]BER: ', BER)
-        # print('[testing]BLER: ', 1.0 - nb_block_no_errors[idx]/args.num_block)
+        
+        if runMultithread:
+            num_block_test = 0
+            error = 0
+            for _ in range(5):
+                if error >= 100:
+                    break
+                pool = mp.Pool(processes=args.num_cpu)
+                results = pool.starmap(turbo_compute, [(test_sigmas[idx],x) for x in range(num_block)])
+                pool.close()
+                nb_errors[idx] += sum(results)
+                error += sum(np.array(results)>0)
+                num_block_test += num_block
+            BER = nb_errors[idx]/float(args.block_len*num_block_test)
+            
+        else:
+            num_block_test = num_block
+            results = []
+            for x in range(num_block):
+                results.append(turbo_compute(args, test_sigmas[idx], trellis1, M))
+                if (sum(results)>60 and x > num_block /40):
+                    num_block_test = x + 1
+                    break
+            nb_block_no_errors[idx] += sum(np.array(results)==0)
+
+            nb_errors[idx]+= sum(results)
+            BER = sum(results)/float(args.block_len*num_block_test)
+        
         commpy_res_ber.append(BER)
         # commpy_res_bler.append(1.0 - nb_block_no_errors[idx]/num_block_test)
 
@@ -115,8 +123,9 @@ def conv_decode_bench(args):
     print('[Result]BER', commpy_res_ber)
     # print('[Result]BLER', commpy_res_bler)
 
-    return commpy_res_ber, 0#, commpy_res_bler
+    return commpy_res_ber, commpy_res_bler
 
 if __name__ == '__main__':
     args = get_args()
-    conv_decode_bench(args)
+    shouldRunMultithread = input("Do you want to run this multithreaded? (Y/N)")
+    conv_decode_bench(args, runMultithread=(shouldRunMultithread=="Y"))
