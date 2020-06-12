@@ -43,16 +43,16 @@ def get_args():
     print('[ID]', args.id)
     return args
 
-def turbo_compute_onearg(onearg):
+def single_simulation_onearg(onearg):
     args=onearg[0]
     sigma_val=onearg[1]
     trellis1=onearg[2]
     M=onearg[3]
-    return turbo_compute(args, sigma_val, trellis1, M)
+    return single_simulation(args, sigma_val, trellis1, M)
 
-def turbo_compute(args, sigma_val, trellis1, M):
+def single_simulation(args, sigma_val, trellis1, M):
     '''
-    Helper function used to compute Turbo Decoding in 1 iterations for one SNR point. 
+    Helper function used to compute Viterbi decoding for one SNR point and one codeword. 
     Called in this.conv_decode_bench().
     '''
     tb_depth = 15
@@ -97,31 +97,31 @@ def conv_decode_bench(args):
     for idx in range(len(test_sigmas)):
         #print("current index", idx)
         print('[testing]SNR: %4.1f'% SNRS[idx])
-        results = []
+        #results = []
         nb_block_errors[idx]=0
         num_block_test = 0
+        pool = mp.Pool(processes=args.num_cpu)
         while nb_block_errors[idx]<num_block_err:
-            num_block_test += args.batch_size # run a batch of simulations
+            num_block_test += args.batch_size # run a batch of battch_size simulations
             onearg=(args, test_sigmas[idx], trellis1, M)
-            oneargv=[onearg for i in range(args.batch_size)]
-            pool = mp.Pool(processes=args.num_cpu)
-            results1 = pool.map(turbo_compute_onearg, oneargv)
-            pool.close()
+            oneargv=[onearg for i in range(args.batch_size)] # just repeat it batch_size times
+            results1 = pool.map(single_simulation_onearg, oneargv)
             #print(results1)
-            #results1=turbo_compute(args, test_sigmas[idx], trellis1, M)
+            ##results1=single_simulation(args, test_sigmas[idx], trellis1, M)
             #results1=[];
             #for i in range(args.batch_size): # run a batch of simulations
-                #results1.append(turbo_compute_onearg(onearg))
+                #results1.append(single_simulation_onearg(onearg))
             nb_block_errors[idx]+= sum([1 if i>0 else 0  for i in results1])
-            results += results1
+            #results += results1
             #print(results)
-            nb_errors[idx]= sum(results)
+            nb_errors[idx] += sum(results1)
             BER = nb_errors[idx]/float(args.block_len*num_block_test)
             BLER = nb_block_errors[idx]/float(num_block_test)
-            if num_block_test % 10 ==0:
+            if num_block_test % 100 ==0: # print intermeadiate results every so often
                 print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
 
         
+        pool.close()
         print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
         #print(results)
         #print(nb_block_errors)
