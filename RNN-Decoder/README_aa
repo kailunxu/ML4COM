@@ -1,5 +1,9 @@
 Run the following:
 
-python conv_codes_benchmark_rewrite_aa.py -num_block_err 100 -block_len 100 -snr_test_start 4.0 -snr_test_end 4.0 -snr_points 1
+python conv_codes_benchmark_rewrite_aa.py -num_block_err 100 -block_len 100 -num_cpu=4 -snr_test_start 4.0 -snr_test_end 4.0 -snr_points 1
+
+compare with the parameter: -num_cpu=1 and -num_cpu=2
+
 
 Note that there is a new argument "num_block_err" which is the number of block errors to collect for a simulation.
+
