@@ -103,17 +103,19 @@ def conv_decode_bench(args):
             nb_errors[idx]= sum(results)
             BER = nb_errors[idx]/float(args.block_len*num_block_test)
             BLER = nb_block_errors[idx]/float(num_block_test)
-            if num_block_test % 100 ==0:
-                print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BER,BLER))
+            if num_block_test % 10 ==0:
+                print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
             num_block_test += 1
 
-        print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BER,BLER))
+        
+        num_block_test -= 1
+        print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
         #print(results)
         #print(nb_block_errors)
         #print(num_block_test)
 
-        print('[testing]BER:  %8.2e'% BER)
         print('[testing]BLER: %8.2e'% BLER)
+        print('[testing]BER:  %8.2e'% BER)
         print('')
         commpy_res_ber.append(BER)
         commpy_res_bler.append(BLER)
@@ -123,12 +125,12 @@ def conv_decode_bench(args):
     for i in SNRS:
         print('%8.1f'% i),
     print('')
-    print('[Result]BER:  '),
-    for i in commpy_res_ber:
-        print('%8.2e'% i),
-    print('')
     print('[Result]BLER: '),
     for i in commpy_res_bler:
+        print('%8.2e'% i),
+    print('')
+    print('[Result]BER:  '),
+    for i in commpy_res_ber:
         print('%8.2e'% i),
 
     return commpy_res_ber, 0#, commpy_res_bler
