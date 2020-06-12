@@ -1,0 +1,5 @@
+Run the following:
+
+python conv_codes_benchmark_rewrite_aa.py -num_block_err 100 -block_len 100 -snr_test_start 4.0 -snr_test_end 4.0 -snr_points 1
+
+Note that there is a new argument "num_block_err" which is the number of block errors to collect for a simulation.
