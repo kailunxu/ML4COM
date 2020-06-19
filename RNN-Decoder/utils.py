@@ -8,6 +8,7 @@ SHall involve:
 import numpy as np
 import math
 import commpy.channelcoding.turbo as turbo
+import commpy.channelcoding.convcode as cc
 
 from scipy import stats
 import keras.backend as K
@@ -337,7 +338,7 @@ def get_test_sigmas(SNR_dB_start_Eb, SNR_dB_stop_Eb, SNR_points):
     test_sigmas
         applied this.snr_db2sigma() to each element in [SNRS_dB]
     """
-    snr_interval = (SNR_dB_stop_Eb - SNR_dB_start_Eb)* 1.0 /  (SNR_points-1)
+    snr_interval = (SNR_dB_stop_Eb - SNR_dB_start_Eb)* 1.0 /  (max(SNR_points,1)-1)
     SNRS_dB = [snr_interval* item + SNR_dB_start_Eb for item in range(SNR_points)]
     SNRS_dB_Es = [item + 10*np.log10(1.0/2.0) for item in SNRS_dB]
     test_sigmas = np.array([np.sqrt(1/(2*10**(float(item)/float(10)))) for item in SNRS_dB_Es])
@@ -365,24 +366,24 @@ def errors(y_true, y_pred):
     return K.mean(tf.cast(myOtherTensor, tf.float32))
 
 def conv_enc(X_train_raw, args):
-
-    import commpy.channelcoding.convcode as cc
+    """
+    Encodes a training sequence using cc.conv_encode(cc.Trellis([CUSTOM_GENERATOR_MATRIX])).
+    """
     num_block = X_train_raw.shape[0]
     block_len = X_train_raw.shape[1]
     x_code    = []
 
-    M = np.array([2]) # Number of delay elements in the convolutional encoder
+    M = np.array([args.M]) # Number of delay elements in the convolutional encoder
     if args.code_rate == 2:
         generator_matrix = np.array([[args.enc1, args.enc2]])
     elif args.code_rate == 3:
         generator_matrix = np.array([[args.enc1, args.enc2, args.enc3]])
-    feedback = args.feedback
 
-    trellis = cc.Trellis(M, generator_matrix,feedback=feedback)# Create trellis data structure
+    trellis = cc.Trellis(M, generator_matrix,feedback=args.feedback)# Create trellis data structure
 
     for idx in range(num_block):
         xx = cc.conv_encode(X_train_raw[idx, :, 0], trellis)
-        xx = xx[2*int(M):]
+        xx = xx[:-2*int(M)] ### MAJOR CHANGE ###
         xx = xx.reshape((block_len, 2))
 
         x_code.append(xx)
@@ -391,7 +392,3 @@ def conv_enc(X_train_raw, args):
 
 
 
-
-
-#if __name__ == '__main__':
- #   pass
