@@ -66,7 +66,8 @@ def turbo_compute(args, sigma_idx, trellis1, M):
 
 def conv_decode_bench(args, runMultithread=False):
     """
-    Outputs benchmark for viterbi algorithm for a given range of test_snr values. Called in Called in plot_stats() of conv_decoder.py.
+    Outputs benchmark for viterbi algorithm for a given range of test_snr values. 
+    Called in plot_stats() of conv_decoder.py.
     """
     print("viterbi starts (block_len =", args.block_len, ")")
     num_block = args.num_block // args.test_ratio #1200

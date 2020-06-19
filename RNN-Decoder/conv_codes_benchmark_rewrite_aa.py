@@ -74,10 +74,10 @@ def single_simulation(args, sigma_val, trellis1, M):
 
 def conv_decode_bench(args):
     """
-    Outputs benchmark for viterbi algorithm for a given range of test_snr values. Called in Called in plot_stats() of conv_decoder.py.
+    Outputs benchmark for viterbi algorithm for a given range of test_snr values. 
+    Called in plot_stats() of conv_decoder.py.
     """
     print("viterbi starts (block_len =", args.block_len, ")")
-    num_block_err = args.num_block_err #100
 
     # Setting Up Codec
     M = np.array([2]) # Number of delay elements in the convolutional encoder
@@ -91,41 +91,40 @@ def conv_decode_bench(args):
     commpy_res_bler= []
 
     nb_errors          = np.zeros(test_sigmas.shape)
-    map_nb_errors      = np.zeros(test_sigmas.shape)
     nb_block_errors = np.zeros(test_sigmas.shape)
 
     for idx in range(len(test_sigmas)):
-        #print("current index", idx)
         print('[testing]SNR: %4.1f'% SNRS[idx])
-        #results = []
-        nb_block_errors[idx]=0
+        
         num_block_test = 0
         pool = mp.Pool(processes=args.num_cpu)
-        while nb_block_errors[idx]<num_block_err:
+        
+        while nb_block_errors[idx] < args.num_block_err: # 100
             num_block_test += args.batch_size # run a batch of battch_size simulations
+            
+            # multithreading option
             onearg=(args, test_sigmas[idx], trellis1, M)
             oneargv=[onearg for i in range(args.batch_size)] # just repeat it batch_size times
             results1 = pool.map(single_simulation_onearg, oneargv)
-            #print(results1)
-            ##results1=single_simulation(args, test_sigmas[idx], trellis1, M)
-            #results1=[];
-            #for i in range(args.batch_size): # run a batch of simulations
-                #results1.append(single_simulation_onearg(onearg))
-            nb_block_errors[idx]+= sum([1 if i>0 else 0  for i in results1])
-            #results += results1
-            #print(results)
+            
+            # single simulation option
+            # results1=single_simulation(args, test_sigmas[idx], trellis1, M)
+
+            # run batch of sumulations option
+            # results1=[single_simulation_onearg(onearg) for i in range(args.batch_size)]
+            
+            nb_block_errors[idx] += sum(np.array(results1) > 0)
             nb_errors[idx] += sum(results1)
+            
             BER = nb_errors[idx]/float(args.block_len*num_block_test)
             BLER = nb_block_errors[idx]/float(num_block_test)
+
             if num_block_test % 100 ==0: # print intermeadiate results every so often
                 print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
 
         
         pool.close()
         print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
-        #print(results)
-        #print(nb_block_errors)
-        #print(num_block_test)
 
         print('[testing]BLER: %8.2e'% BLER)
         print('[testing]BER:  %8.2e'% BER)
