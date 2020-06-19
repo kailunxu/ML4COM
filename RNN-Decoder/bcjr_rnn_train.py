@@ -41,15 +41,15 @@ def get_args():
 
     parser.add_argument('-num_block_train', type=int, default=100)
     parser.add_argument('-num_block_test', type=int, default=100)
-    parser.add_argument('-block_len', type=int, default=100)
+    parser.add_argument('-block_len', type=int, default=10000)
     parser.add_argument('-num_dec_iteration', type=int, default=6)
 
-    parser.add_argument('-code_rate', type=int, default=3, help='if using BCJR, use code rate 3')
+    parser.add_argument('-code_rate', type=int, default=2)
     parser.add_argument('-enc1',  type=int, default=7)
     parser.add_argument('-enc2',  type=int, default=5)
     parser.add_argument('-feedback',  type=int, default=7)
     parser.add_argument('-M',  type=int, default=2, help="Number of delay elements in the convolutional encoder")
-
+    
     parser.add_argument('-num_cpu', type=int, default=4)
 
     parser.add_argument('-snr_test_start', type=float, default=-3.0)
@@ -57,7 +57,6 @@ def get_args():
     parser.add_argument('-snr_points', type=int, default=10)
 
     parser.add_argument('-init_nw_model', type=str, default='default')
-
     parser.add_argument('-rnn_setup', choices = ['lstm', 'gru'], default = 'lstm')
     parser.add_argument('-rnn_direction', choices = ['bd', 'sd'], default = 'bd')
     parser.add_argument('-num_Dec_layer', type=int, default=2)
@@ -66,7 +65,6 @@ def get_args():
     parser.add_argument('-batch_size',  type=int, default=10)
     parser.add_argument('-learning_rate',  type=float, default=0.001)
     parser.add_argument('-num_epoch',  type=int, default=20)
-
 
     parser.add_argument('-noise_type', choices = ['awgn', 't-dist','hyeji_bursty'], default='awgn')
     parser.add_argument('-train_snr', type=float, default=-1.0)
@@ -86,14 +84,16 @@ def get_args():
     args = parser.parse_args()
     print(args)
     print('[ID]', args.id)
+
     return args
+
+
 
 def test_bcjr_ber(args, model_path):
     '''
     under construction. ugly code available via requirement. ETA 0228.
     '''
     pass
-
 
 def train_decoder(args):
     """
@@ -104,13 +104,10 @@ def train_decoder(args):
     print('[BCJR Setting Parameters] Training batch_size is ',                   args.batch_size)
     print('[BCJR Setting Parameters] Training num_epoch is ',                    args.num_epoch)
     print('[BCJR Setting Parameters] Turbo Decoding Iteration ',                 args.num_dec_iteration)
-
     print('[BCJR Setting Parameters] RNN Direction is ', args.rnn_direction)
     print('[BCJR Setting Parameters] RNN Model Type is ', args.rnn_setup)
     print('[BCJR Setting Parameters] Number of RNN layer is ', args.num_Dec_layer)
     print('[BCJR Setting Parameters] Number of RNN unit is ', args.num_Dec_unit)
-
-
     M = np.array([args.M])
     generator_matrix = np.array([[args.enc1,args.enc2]])
     feedback = args.feedback
@@ -120,14 +117,10 @@ def train_decoder(args):
     p_array = interleaver.p_array
     print('[BCJR Code Codec] Encoder', 'M ', M, ' Generator Matrix ', generator_matrix, ' Feedback ', feedback)
     codec  = [trellis1, trellis2, interleaver]
-
     print('[BCJR Setting Parameters] Training Data SNR is ', args.train_snr, ' dB')
     print('[BCJR Setting Parameters] Code Block Length is ', args.block_len)
     print('[BCJR Setting Parameters] Number of Train Block is ', args.num_block_train, ' Test Block ', args.num_block_test)
-
     model = build_decoder(args)
-
-
     bcjr_inputs_train, bcjr_outputs_train = generate_bcjr_example(args.num_block_train, args.block_len,
                                                                   codec, is_save = False,num_iteration = args.num_dec_iteration,
                                                                   train_snr_db = args.train_snr, save_path = './tmp/')
@@ -136,13 +129,14 @@ def train_decoder(args):
                                                                   codec, is_save = False, num_iteration = args.num_dec_iteration,
                                                                   train_snr_db = args.train_snr, save_path = './tmp/')
 
-
     train_batch_size  = args.batch_size                   # 100 good.
     test_batch_size   = args.batch_size
     input_feature_num = 3
 
     optimizer= keras.optimizers.adam(lr=args.learning_rate)
     model.compile(optimizer=optimizer,loss=args.loss, metrics=['mae'])
+
+
 
     if args.init_nw_model != 'default':
         model.load_weights(args.init_nw_model)
@@ -152,14 +146,12 @@ def train_decoder(args):
 
     model.fit(x=bcjr_inputs_train, y=bcjr_outputs_train, batch_size=train_batch_size,
               epochs=args.num_epoch,  validation_data= (bcjr_inputs_test, bcjr_outputs_test))
-
     model.save_weights('./tmp/bcjr_train'+args.id +'_1.h5')
     print('[BCJR] Saved Model at', './tmp/bcjr_train'+args.id +'_1.h5')
-
     test_bcjr_ber(args,'./tmp/bcjr_train'+args.id +'_1.h5' )
 
 
-def bcjr_compute(args, noise_sigma, trellis1, M, num_iterations=1):
+def bcjr_compute(args, noise_sigma, trellis1, M):
     """
     Computes BCJR for one test_snr value
     """
@@ -184,7 +176,7 @@ def bcjr_compute(args, noise_sigma, trellis1, M, num_iterations=1):
     return num_bit_errors
 
 
-def bcjr_bench(args, num_iterations=1, max_batch=40, batch_size=10):
+def bcjr_bench(args, max_batch=40, batch_size=10):
     """
     Benchmark for MAP algorithm in Figure 3 of [1]
     """
@@ -207,7 +199,7 @@ def bcjr_bench(args, num_iterations=1, max_batch=40, batch_size=10):
             if nb_errors[idx] > 100: # stopping condition based on number of errors
                 break
             for _ in range(batch_size):
-                val = bcjr_compute(args, noise_sigma, trellis1, M, num_iterations)
+                val = bcjr_compute(args, noise_sigma, trellis1, M)
                 nb_errors[idx] += val
                 # nb_block_no_errors[idx] += (val==0)
         nb_errors[idx] /= (args.block_len*num_batch*batch_size)
