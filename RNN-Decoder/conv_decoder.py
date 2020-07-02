@@ -40,8 +40,61 @@ from commpy.utilities import hamming_dist
 # from conv_codes_benchmark_rewrite_aa import conv_decode_bench
 # from bcjr_rnn_train import bcjr_bench
 from utils import get_test_sigmas, errors, snr_db2sigma, conv_enc
-from run_benchmarks import benchmark_compute
+from run_benchmarks import bench_runner
 
+
+
+def get_test_model(args, dec_weight, noise_sigma):
+    """
+    Returns
+    -------
+    model_test
+        Returns a model with trained weights according to [dec_weight] and the given [snr_db]
+    """
+    dec_trainable = True
+    inputs = Input(shape=(args.block_len, args.code_rate))
+
+    def channel(x):
+        """
+        Simulates an AWGN noisy channel, outputting x+noise_sigma*Normal(0,1).
+        """
+        # noise_sigma =  snr_db2sigma(snr_db)
+        return x+ noise_sigma*tf.random.normal(tf.shape(x),dtype=tf.float32, mean=0., stddev=1.0)   #need to include space for different snrs
+
+    # Simulate channel
+    x          = Lambda(channel)(inputs)
+
+    # Establish RNN tensorflow model
+    for layer in range(args.num_Dec_layer - 1):
+        if args.rnn_setup == 'lstm':
+            x = Bidirectional(LSTM(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
+                                 trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(layer))(x)
+        elif args.rnn_setup == 'gru':
+            x = Bidirectional(GRU(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
+                                 trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(layer))(x)
+
+        x = BatchNormalization(trainable=dec_trainable, name = 'Dec_bn_'+str(layer))(x)
+
+    y = x
+
+    if args.rnn_setup == 'lstm':
+        y = Bidirectional(LSTM(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
+                            trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(args.num_Dec_layer-1) )(y)
+    elif args.rnn_setup == 'gru':
+        y = Bidirectional(GRU(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
+                            trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(args.num_Dec_layer-1) )(y)
+
+    x = BatchNormalization(trainable=dec_trainable, name = 'Dec_bn_'+str(args.num_Dec_layer-1))(y)
+
+    # Add sigmoid layer
+    predictions = TimeDistributed(Dense(1, activation='sigmoid'), trainable=dec_trainable, name = 'Dec_fc')(x)
+
+    # Compile and load model
+    model_test = Model(inputs=inputs, outputs=predictions)
+    model_test.compile(optimizer=keras.optimizers.adam(),loss=args.loss, metrics=[errors])
+    model_test.load_weights(dec_weight, by_name=True)
+    
+    return model_test
 
 def get_args():
     import argparse
@@ -52,6 +105,8 @@ def get_args():
     parser.add_argument('-block_len', type=int, default=100)
     parser.add_argument('-variation_block_len', type=int, default=100)
     parser.add_argument('-test_ratio',  type=int, default=10)
+
+    parser.add_argument('-num_cpu',  type=int, default=1)
 
     parser.add_argument('-num_Dec_layer',  type=int, default=2)
     parser.add_argument('-num_Dec_unit',  type=int, default=200)
@@ -202,200 +257,13 @@ def train(args):
               batch_size=args.batch_size, epochs=args.num_epoch)
 
     model.save_weights('./tmp/conv_dec'+args.id+'.h5')
-    
-def get_test_model(args, dec_weight, snr_db):
-    """
-    Returns
-    -------
-    model_test
-        Returns a model with trained weights according to [dec_weight] and the given [snr_db]
-    """
-    dec_trainable = True
-    inputs = Input(shape=(args.block_len, args.code_rate))
 
-    def channel(x):
-        """
-        Simulates an AWGN noisy channel, outputting x+noise_sigma*Normal(0,1).
-        """
-        noise_sigma =  snr_db2sigma(snr_db)
-        return x+ noise_sigma*tf.random.normal(tf.shape(x),dtype=tf.float32, mean=0., stddev=1.0)   #need to include space for different snrs
-
-    # Simulate channel
-    x          = Lambda(channel)(inputs)
-
-    # Establish RNN tensorflow model
-    for layer in range(args.num_Dec_layer - 1):
-        if args.rnn_setup == 'lstm':
-            x = Bidirectional(LSTM(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
-                                 trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(layer))(x)
-        elif args.rnn_setup == 'gru':
-            x = Bidirectional(GRU(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
-                                 trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(layer))(x)
-
-        x = BatchNormalization(trainable=dec_trainable, name = 'Dec_bn_'+str(layer))(x)
-
-    y = x
-
-    if args.rnn_setup == 'lstm':
-        y = Bidirectional(LSTM(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
-                            trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(args.num_Dec_layer-1) )(y)
-    elif args.rnn_setup == 'gru':
-        y = Bidirectional(GRU(units=args.num_Dec_unit, activation='tanh', return_sequences=True,
-                            trainable=dec_trainable), name = 'Dec_'+args.rnn_setup+'_'+str(args.num_Dec_layer-1) )(y)
-
-    x = BatchNormalization(trainable=dec_trainable, name = 'Dec_bn_'+str(args.num_Dec_layer-1))(y)
-
-    # Add sigmoid layer
-    predictions = TimeDistributed(Dense(1, activation='sigmoid'), trainable=dec_trainable, name = 'Dec_fc')(x)
-
-    # Compile and load model
-    model_test = Model(inputs=inputs, outputs=predictions)
-    model_test.compile(optimizer=keras.optimizers.adam(),loss=args.loss, metrics=[errors])
-    model_test.load_weights(dec_weight, by_name=True)
-    
-    return model_test
-
-def test(args, dec_weight, expanded = 1, bit = False):
-    """
-    Creates a curve of Viterbi-style decoder (using this.train()) or BCJR-style decoder (using bcjr_rnn_train.py) BER/BLER using many different test-SNR rates.
-    Data is encoded using this.conv_enc() and this.get_test_model.channel(). 
-
-    Parameters
-    ----------
-    expanded : int
-        scales the block_len of testing data by 10**expanded. See Figure 4
-
-    bit : bool
-        If true, calls this.plot_bits() and plots BER for individually specified bit positions against the test-SNR range.
-        If false, calls this.plot_stats() and compares testing data with viterbi benchmark (using conv_codes_benchmark_rewrite.conv_codes_bench()).
-
-    """
-    # Expand block length if desired
-    if (expanded != 1):
-        print("expanded the block length "+ str(expanded) +" times")
-        args.block_len *= (10**expanded)
-
-    # Get testing data
-    X_test_raw  = np.random.randint(0,2,int(args.num_block*args.block_len/args.test_ratio))
-    X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
-    X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
-
-    SNRS_dB, _ = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
-    print('[testing]', SNRS_dB)
-
-    bler = []
-    ber = []
-    for idx, snr_db in enumerate(SNRS_dB):
-        print("index", idx)
-        # get model predictions
-        model_test = get_test_model(args, dec_weight, snr_db)
-        pd       = model_test.predict(X_conv_test, verbose=0)
-        decoded_bits = np.round(pd)
-
-        # ber error rate
-        if bit == True:
-            ber_err_rate = [sum(sum(abs(decoded_bits[:, i, :]-X_test[:, i, :])))*1.0/(X_test.shape[0]) for i in range(0, args.block_len)]
-        else:
-            ber_err_rate  = sum(sum(sum(abs(decoded_bits-X_test))))*1.0/(X_test.shape[0] * X_test.shape[1])
-            # model.get_test_model(X_feed_test, X_message_test, batch_size=10)
-        ber.append(ber_err_rate)
-
-        # bler error rate
-        tp0 = (abs(decoded_bits-X_test)).reshape([X_test.shape[0],X_test.shape[1]])
-        bler_err_rate = sum(np.sum(tp0,axis=1)>0)*1.0/(X_test.shape[0])
-        bler.append(bler_err_rate)
-
-        del model_test
-
-    print('[[SNRS]]:', SNRS_dB)
-    print('[[BER]]:',ber)
-    # print('BLER:',bler)
-    if (bit == True):
-        plot_bits(args, ber)
-    else:
-        plot_name = args.id + (" test normal " if expanded ==1 else " length expanded " + str(expanded) + "times")
-        plot_stats(args, ber, plot_name)
-
-    return ber
-
-def decoder_obj(args, received, PARAMS={'dec_weight': 0, 'noise_sigma': 0, 'num_blocks': 0}):
-    model_test = get_test_model(args, PARAMS['dec_weight'], PARAMS['noise_sigma'])
-    pd         = model_test.predict(received, verbose=0)
-    decoded_bits = np.round(pd)
+def decoder_obj(args, received, PARAMS={'dec_weight': 0, 'noise_sigma': 0, 'M': 0, 'model_test': 0}):
+    # model_test = get_test_model(args, PARAMS['dec_weight'], PARAMS['noise_sigma'])
+    pd         = PARAMS['model_test'].predict(received, verbose=0)
+    decoded_bits = np.round(pd).astype(int)
     return decoded_bits
 
-# def single_simulation(args, dec_weight, snr_db, num_blocks):
-#     X_test  = np.random.randint(0,2,(num_blocks,args.block_len,1))
-#     X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
-
-#     # get model predictions
-#     model_test   = get_test_model(args, dec_weight, snr_db)
-#     pd           = model_test.predict(X_conv_test, verbose=0)
-#     decoded_bits = np.round(pd)
-
-#     # num_bit_errors = hamming_dist(X_test.flatten(), decoded_bits.flatten())
-#     num_bit_errors = sum(X_test.flatten() != decoded_bits.flatten())
-    
-#     del model_test
-#     return num_bit_errors
-    
-
-# def test_in_batches(args, dec_weight):
-#     """
-#     Creates a curve of Viterbi-style decoder (using this.train()) or BCJR-style decoder (using bcjr_rnn_train.py) BER/BLER using many different test-SNR rates.
-#     Data is encoded using this.conv_enc() and this.get_test_model.channel(). 
-#     """
-#     print("running TIB")
-
-#     # Get testing data
-#     num_blocks = int(args.num_block/args.test_ratio)
-
-#     SNRS, test_sigmas = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
-    
-#     commpy_res_ber = []
-#     commpy_res_bler= []
-
-#     nb_errors          = np.zeros(test_sigmas.shape)
-#     nb_block_errors = np.zeros(test_sigmas.shape)
-
-#     for idx, snr_db in enumerate(SNRS):
-#         print('[testing]SNR: %4.1f'% SNRS[idx])
-
-#         num_block_test = 0
-        
-#         while nb_block_errors[idx] < args.num_block_err: # 100
-#             num_block_test += args.batch_size # run a batch of batch_size simulations
-
-#             # results1 = [single_simulation(args, dec_weight, snr_db, num_blocks, args.block_len) for i in range(args.batch_size)]
-#             results1 = [
-#                 benchmark_compute(args, decoder_obj, {'dec_weight': dec_weight, 'snr_db': snr_db, 'num_blocks': num_blocks})
-#                 for i in range(args.batch_size)
-#             ]
-            
-#             nb_block_errors[idx] += sum(np.array(results1) > 0)
-#             nb_errors[idx] += sum(results1)
-
-#             BER = nb_errors[idx]/float(args.block_len*num_block_test)
-#             BLER = nb_block_errors[idx]/float(num_block_test)
-
-#             if num_block_test % 100 ==0:
-#                 print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
-
-#         print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
-#         commpy_res_ber.append(BER)
-#         commpy_res_bler.append(BLER)
-
-
-#         print('[testing]BLER: %8.2e'% BLER)
-#         print('[testing]BER:  %8.2e'% BER)
-
-#     print('[[SNRS]]:', SNRS)
-#     print('[[BER]]:', commpy_res_ber)
-#     # print('[[BLER]]:',commpy_res_bler)
-#     plot_stats(args, commpy_res_ber, "test with batches")
-
-#     return commpy_res_ber
-      
 
 def plot_compare(args, snr1, snr2, name1, name2):
     """
@@ -542,11 +410,12 @@ def main(type):
     if (args.type == 'test_batches'):
         print("Testing in Batches:")
         modelnum = input("Please input the model number: ")
-        #modelnum = args.id
+        simulation_option = int(input("Please input simulation option {0,1,2}: "))
+        # modelnum = args.id
         # test_in_batches(args, dec_weight='./tmp/conv_dec'+modelnum+'.h5')
-        bench_runner(args, decoder_obj, dec_weight='./tmp/conv_dec'+modelnum+'.h5')
+        bench_runner(args, decoder_obj, simulation_option=simulation_option, dec_weight='./tmp/conv_dec'+modelnum+'.h5', get_test_model=get_test_model)
     if (args.type == 'test'):
-        print("Testing:")
+        print("(DEPCREATED) Testing:")
         modelnum = input("Please input the model number: ")
         #modelnum = args.id
         test(args, dec_weight='./tmp/conv_dec'+modelnum+'.h5')
@@ -593,6 +462,151 @@ def main(type):
         plot_fig15(args, V)
 
 
+###########################################################
+
+def test(args, dec_weight, expanded = 1, bit = False):
+    """
+    DEPRECATED
+
+    Creates a curve of Viterbi-style decoder (using this.train()) or BCJR-style decoder (using bcjr_rnn_train.py) BER/BLER using many different test-SNR rates.
+    Data is encoded using this.conv_enc() and this.get_test_model.channel(). 
+
+    Parameters
+    ----------
+    expanded : int
+        scales the block_len of testing data by 10**expanded. See Figure 4
+
+    bit : bool
+        If true, calls this.plot_bits() and plots BER for individually specified bit positions against the test-SNR range.
+        If false, calls this.plot_stats() and compares testing data with viterbi benchmark (using conv_codes_benchmark_rewrite.conv_codes_bench()).
+
+    """
+    # Expand block length if desired
+    if (expanded != 1):
+        print("expanded the block length "+ str(expanded) +" times")
+        args.block_len *= (10**expanded)
+
+    # Get testing data
+    X_test_raw  = np.random.randint(0,2,int(args.num_block*args.block_len/args.test_ratio))
+    X_test  = X_test_raw.reshape((int(args.num_block/args.test_ratio), args.block_len, 1))
+    X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
+
+    SNRS_dB, _ = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
+    print('[testing]', SNRS_dB)
+
+    bler = []
+    ber = []
+    for idx, snr_db in enumerate(SNRS_dB):
+        print("index", idx)
+        # get model predictions
+        model_test = get_test_model(args, dec_weight, snr_db)
+        pd       = model_test.predict(X_conv_test, verbose=0)
+        decoded_bits = np.round(pd)
+
+        # ber error rate
+        if bit == True:
+            ber_err_rate = [sum(sum(abs(decoded_bits[:, i, :]-X_test[:, i, :])))*1.0/(X_test.shape[0]) for i in range(0, args.block_len)]
+        else:
+            ber_err_rate  = sum(sum(sum(abs(decoded_bits-X_test))))*1.0/(X_test.shape[0] * X_test.shape[1])
+            # model.get_test_model(X_feed_test, X_message_test, batch_size=10)
+        ber.append(ber_err_rate)
+
+        # bler error rate
+        tp0 = (abs(decoded_bits-X_test)).reshape([X_test.shape[0],X_test.shape[1]])
+        bler_err_rate = sum(np.sum(tp0,axis=1)>0)*1.0/(X_test.shape[0])
+        bler.append(bler_err_rate)
+
+        del model_test
+
+    print('[[SNRS]]:', SNRS_dB)
+    print('[[BER]]:',ber)
+    # print('BLER:',bler)
+    if (bit == True):
+        plot_bits(args, ber)
+    else:
+        plot_name = args.id + (" test normal " if expanded ==1 else " length expanded " + str(expanded) + "times")
+        plot_stats(args, ber, plot_name)
+
+    return ber
+
+def single_simulation(args, dec_weight, snr_db, num_blocks):
+    """
+    DEPRECATED
+    """
+    X_test  = np.random.randint(0,2,(num_blocks,args.block_len,1))
+    X_conv_test  = 2.0*conv_enc(X_test, args)  - 1.0
+
+    # get model predictions
+    model_test   = get_test_model(args, dec_weight, snr_db)
+    pd           = model_test.predict(X_conv_test, verbose=0)
+    decoded_bits = np.round(pd)
+
+    # num_bit_errors = hamming_dist(X_test.flatten(), decoded_bits.flatten())
+    num_bit_errors = sum(X_test.flatten() != decoded_bits.flatten())
+    
+    del model_test
+    return num_bit_errors
+    
+
+def test_in_batches(args, dec_weight):
+    """
+    DEPRECATED
+
+    Creates a curve of Viterbi-style decoder (using this.train()) or BCJR-style decoder (using bcjr_rnn_train.py) BER/BLER using many different test-SNR rates.
+    Data is encoded using this.conv_enc() and this.get_test_model.channel(). 
+    """
+    print("running TIB")
+
+    # Get testing data
+    num_blocks = int(args.num_block/args.test_ratio)
+
+    SNRS, test_sigmas = get_test_sigmas(args.snr_test_start, args.snr_test_end, args.snr_points)
+    
+    commpy_res_ber = []
+    commpy_res_bler= []
+
+    nb_errors          = np.zeros(test_sigmas.shape)
+    nb_block_errors = np.zeros(test_sigmas.shape)
+
+    for idx, snr_db in enumerate(SNRS):
+        print('[testing]SNR: %4.1f'% SNRS[idx])
+
+        num_block_test = 0
+        
+        while nb_block_errors[idx] < args.num_block_err: # 100
+            print("Batch: ", num_block_test)
+            num_block_test += args.batch_size # run a batch of batch_size simulations
+
+            results1 = [single_simulation(args, dec_weight, snr_db, num_blocks) for i in range(args.batch_size)]
+            # results1 = [
+            #     benchmark_compute(args, decoder_obj, {'dec_weight': dec_weight, 'snr_db': snr_db, 'num_blocks': num_blocks},isConvDecode=True)
+            #     for i in range(args.batch_size)
+            # ]
+            
+            nb_block_errors[idx] += sum(np.array(results1) > 0)
+            nb_errors[idx] += sum(results1)
+
+            BER = nb_errors[idx]/float(args.block_len*num_block_test)
+            BLER = nb_block_errors[idx]/float(num_block_test)
+
+            if num_block_test % 100 ==0:
+                print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
+
+        print('%8d %8d %8d %8.2e %8.2e'% (num_block_test, int(nb_block_errors[idx]), nb_errors[idx] ,BLER,BER))
+        commpy_res_ber.append(BER)
+        commpy_res_bler.append(BLER)
+
+
+        print('[testing]BLER: %8.2e'% BLER)
+        print('[testing]BER:  %8.2e'% BER)
+
+    print('[[SNRS]]:', SNRS)
+    print('[[BER]]:', commpy_res_ber)
+    # print('[[BLER]]:',commpy_res_bler)
+    # plot_stats(args, commpy_res_ber, "test with batches")
+
+    return commpy_res_ber
+      
 
 if __name__ == '__main__':
     args = get_args()
